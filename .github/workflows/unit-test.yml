@@ -1,10 +1,6 @@
 name: Unit Tests
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-  merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -23,6 +19,7 @@ jobs:
           - "24"
           - "25"
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -43,12 +40,17 @@ jobs:
           matrix.node_version == '18' ||
           matrix.node_version == '20.6.0'
           }}
-      - run: npm install -g npm@latest
+      # npm@12.0.0 requires Node.js ^22.22.2 || ^24.15.0 || >=26.0.0
+      # Install the latest npm compatible with this version of Node.js
+      - run: npm install -g npm@"<12.0.0"
         if: ${{
           matrix.node_version == '20' ||
-          matrix.node_version == '22' ||
-          matrix.node_version == '24' ||
           matrix.node_version == '25'
+          }}
+      - run: npm install -g npm@latest
+        if: ${{
+          matrix.node_version == '22' ||
+          matrix.node_version == '24'
           }}
 
       - name: Bootstrap
@@ -59,14 +61,23 @@ jobs:
 
       - run: npm test
 
-      - name: Report Coverage
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: Pack sdk-node
+        if: ${{ matrix.node_version == '22' }}
+        run: |
+          mkdir -p dist-out
+          npm pack --workspace=experimental/packages/opentelemetry-sdk-node --pack-destination=dist-out
+          mv dist-out/opentelemetry-sdk-node-0.212.0.tgz dist-out/sdk-node-0.212.0.tgz
+
+      - name: Upload sdk-node tarball
+        if: ${{ matrix.node_version == '22' }}
+        uses: actions/upload-artifact@v4
         with:
-          verbose: true
+          name: sdk-node-tgz
+          path: dist-out/sdk-node-0.212.0.tgz
+          if-no-files-found: error
   node-windows-tests:
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -92,6 +103,7 @@ jobs:
         run: npm run test
   browser-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -111,14 +123,9 @@ jobs:
 
       - name: Unit tests
         run: npm run test:browser
-      - name: Report Coverage
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        with:
-          verbose: true
   webworker-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -137,9 +144,3 @@ jobs:
 
       - name: Unit tests
         run: npm run test:webworker
-      - name: Report Coverage
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        with:
-          verbose: true
